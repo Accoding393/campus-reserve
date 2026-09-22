@@ -16,14 +16,76 @@ if (!process.env.DATABASE_URL) {
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 async function addResource(client, collegeId, resource) {
-  const [name, type, capacity, building, hasAc, hasProjector, computers, restricted] = resource;
-  await client.query(`INSERT INTO resources
-    (college_id,name,resource_type,capacity,building,has_ac,has_projector,computer_count,restricted_to_festivals)
-    SELECT $1::integer,$2::varchar,$3::varchar,$4::integer,$5::varchar,$6::boolean,$7::boolean,$8::integer,$9::boolean
-    WHERE NOT EXISTS (SELECT 1 FROM resources WHERE college_id=$1::integer AND name=$2::varchar)`,
-  [collegeId, name, type, capacity, building, hasAc, hasProjector, computers, restricted]);
-}
+  const [
+    name,
+    type,
+    capacity,
+    building,
+    hasAc,
+    hasProjector,
+    computers,
+    restricted,
+    latitude,
+    longitude,
+    locationNote
+  ] = resource;
 
+  // First try to update an existing resource.
+  const updated = await client.query(
+    `UPDATE resources
+     SET
+       resource_type = $3,
+       capacity = $4,
+       building = $5,
+       has_ac = $6,
+       has_projector = $7,
+       computer_count = $8,
+       restricted_to_festivals = $9,
+       latitude = $10,
+       longitude = $11,
+       location_note = $12
+     WHERE college_id = $1 AND name = $2`,
+    [
+      collegeId,
+      name,
+      type,
+      capacity,
+      building,
+      hasAc,
+      hasProjector,
+      computers,
+      restricted,
+      latitude,
+      longitude,
+      locationNote
+    ]
+  );
+
+  // If the resource doesn't exist, create it.
+  if (!updated.rowCount) {
+    await client.query(
+      `INSERT INTO resources
+       (college_id,name,resource_type,capacity,building,has_ac,has_projector,
+        computer_count,restricted_to_festivals,latitude,longitude,location_note)
+       VALUES
+       ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [
+        collegeId,
+        name,
+        type,
+        capacity,
+        building,
+        hasAc,
+        hasProjector,
+        computers,
+        restricted,
+        latitude,
+        longitude,
+        locationNote
+      ]
+    );
+  }
+}
 async function run() {
   const client = await pool.connect();
   try {
@@ -73,18 +135,160 @@ async function run() {
     await client.query(`DELETE FROM colleges WHERE code <> 'NITT'`);
 
     const nittResources = [
-      ['Third I', 'classroom', 100, 'Third I Block', true, true, 100, false],
-      ['Barn Hall', 'hall', 500, 'Student Activity Centre', true, true, 0, false],
-      ['A-Series Hall 5', 'hall', 100, 'A-Series Block', true, true, 0, false],
-      ['A-Series Hall 6', 'hall', 100, 'A-Series Block', true, true, 0, false],
-      ['A-Series Hall 7', 'hall', 100, 'A-Series Block', true, true, 0, false],
-      ['A-Series Hall 8', 'hall', 100, 'A-Series Block', true, true, 0, false],
-      ['A-Series Hall 9', 'hall', 100, 'A-Series Block', true, true, 0, false],
-      ['A-Series Hall 10', 'hall', 100, 'A-Series Block', true, true, 0, false],
-      ['GJCH', 'hall', 3000, 'GJCH Complex', false, false, 0, false],
-      ['MCA/MTech Lab', 'lab', 115, 'Computer Applications Block', true, true, 115, false],
-      ['CEE-SAT Ground', 'ground', 10000, 'CEE / SAT Grounds', false, false, 0, true]
-    ];
+  [
+    'Third I',
+    'classroom',
+    100,
+    'Third I Block',
+    true,
+    true,
+    100,
+    false,
+    10.761354,
+    78.814908,
+    'Near CSG'
+  ],
+
+  [
+    'Barn Hall',
+    'hall',
+    500,
+    'Student Activity Centre',
+    true,
+    true,
+    0,
+    false,
+    10.759323,
+    78.813280,
+    'Behide NITT main'
+  ],
+
+  [
+    'A-Series Hall 5',
+    'hall',
+    100,
+    'A-Series Block',
+    true,
+    true,
+    0,
+    false,
+    10.758996,
+    78.813411,
+    'Inside NITT main'
+  ],
+
+  [
+    'A-Series Hall 6',
+    'hall',
+    100,
+    'A-Series Block',
+    true,
+    true,
+    0,
+    false,
+    10.758977,
+    78.813419,
+    'Inside NITT main'
+  ],
+
+  [
+    'A-Series Hall 7',
+    'hall',
+    100,
+    'A-Series Block',
+    true,
+    true,
+    0,
+    false,
+    10.758983,
+    78.813537,
+    'Inside NITT main'
+  ],
+
+  [
+    'A-Series Hall 8',
+    'hall',
+    100,
+    'A-Series Block',
+    true,
+    true,
+    0,
+    false,
+    10.758859,
+    78.813898,
+    'Inside NITT main'
+  ],
+
+  [
+    'A-Series Hall 9',
+    'hall',
+    100,
+    'A-Series Block',
+    true,
+    true,
+    0,
+    false,
+    10.758893,
+    78.813763,
+    'Inside NITT main'
+  ],
+
+  [
+    'A-Series Hall 10',
+    'hall',
+    100,
+    'A-Series Block',
+    true,
+    true,
+    0,
+    false,
+    10.758959,
+    78.813253,
+    'Inside NITT main'
+  ],
+
+  [
+    'GJCH',
+    'hall',
+    3000,
+    'GJCH Complex',
+    false,
+    false,
+    0,
+    false,
+    10.761389,
+    78.811162,
+    'Near CEESAT ground'
+  ],
+
+  [
+    'MCA/MTech Lab',
+    'lab',
+    115,
+    'Computer Applications Block',
+    true,
+    true,
+    115,
+    false,
+    10.759792,
+    78.818065,
+    'In front of Lyceum'
+  ],
+
+  [
+    'CEE-SAT Ground',
+    'ground',
+    10000,
+    'CEE / SAT Grounds',
+    false,
+    false,
+    0,
+    true,
+    10.760901,
+    78.812682,
+    'In front Of GJCH'
+  ]
+];
     for (const resource of nittResources) await addResource(client, nittId, resource);
 
     const resourcesResult = await client.query('SELECT id,name FROM resources WHERE college_id=$1 AND is_active=true', [nittId]);
