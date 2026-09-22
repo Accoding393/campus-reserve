@@ -40,6 +40,13 @@ function initials(name = '') { return name.split(' ').map((n) => n[0]).join('').
 function formatDate(date, options = { day: 'numeric', month: 'short', year: 'numeric' }) { return new Intl.DateTimeFormat('en-IN', options).format(new Date(date)); }
 function formatDateTime(date) { return new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(new Date(date)); }
 function localDateTime(date = new Date()) { const offset = date.getTimezoneOffset(); return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 16); }
+// TIMEZONE FIX: Convert a datetime-local value (user's local time)
+// into an ISO UTC timestamp before sending to the server.
+// Example: 27 Sep 2026 11:59 PM IST -> 2026-09-27T18:29:00.000Z
+function localDateTimeToISO(value) {
+  if (!value) return value;
+  return new Date(value).toISOString();
+}
 function dateKey(date) { const local = new Date(date); return `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}`; }
 function displayMonth(date) { return new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric' }).format(date); }
 function startOfMonth(date) { return new Date(date.getFullYear(), date.getMonth(), 1); }
@@ -593,7 +600,35 @@ function openRescheduleModal(eventId) {
 
 async function afterMutation(message) { closeModal(); await loadWorkspace(); render(); toast(message); }
 async function submitCollege(event) { event.preventDefault(); const form = Object.fromEntries(new FormData(event.currentTarget)); try { await api('/colleges', { method: 'POST', body: JSON.stringify(form) }); await afterMutation('College added.'); } catch (error) { toast(error.message, 'error'); } }
-async function submitEvent(event) { event.preventDefault(); const formData = new FormData(event.currentTarget); const form = Object.fromEntries(formData); form.collegeId = state.selectedCollegeId; form.guestVisible = formData.get('guestVisible') === 'on'; try { const created = await api('/events', { method: 'POST', body: JSON.stringify(form) }); const note = created.displaced?.length ? ` Allocated by replacing ${created.displaced.map((item) => item.title).join(', ')}.` : ''; await afterMutation(`Event scheduled.${note}`); } catch (error) { toast(error.message, 'error'); } }
+async function submitEvent(event) {
+  event.preventDefault();
+
+  const formData = new FormData(event.currentTarget);
+  const form = Object.fromEntries(formData);
+
+  form.collegeId = state.selectedCollegeId;
+  form.guestVisible = formData.get('guestVisible') === 'on';
+
+  // TIMEZONE FIX: datetime-local has no timezone, so convert the user's
+  // local date/time to an ISO UTC timestamp before sending it.
+  form.startAt = localDateTimeToISO(form.startAt);
+  form.endAt = localDateTimeToISO(form.endAt);
+
+  try {
+    const created = await api('/events', {
+      method: 'POST',
+      body: JSON.stringify(form)
+    });
+
+    const note = created.displaced?.length
+      ? ` Allocated by replacing ${created.displaced.map((item) => item.title).join(', ')}.`
+      : '';
+
+    await afterMutation(`Event scheduled.${note}`);
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
 async function submitResource(event) {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
@@ -638,21 +673,56 @@ async function submitGuestRegistration(event) {
 }
 async function submitRequest(event) {
   event.preventDefault();
+
   const form = Object.fromEntries(new FormData(event.currentTarget));
+
   form.needsAc = form.needsAc === 'true';
   form.needsProjector = form.needsProjector === 'true';
   form.needsComputers = form.needsComputers === 'true';
   form.expectedAttendance = Number(form.expectedAttendance);
+
+  // TIMEZONE FIX: convert local datetime-local values to UTC.
+  form.requestedStart = localDateTimeToISO(form.requestedStart);
+  form.requestedEnd = localDateTimeToISO(form.requestedEnd);
+
   try {
-    const created = await api('/requests', { method: 'POST', body: JSON.stringify(form) });
+    const created = await api('/requests', {
+      method: 'POST',
+      body: JSON.stringify(form)
+    });
+
     const message = form.allocationMode === 'automatic'
-      ? (created.automaticSuggestion ? `Request sent with automatic suggestion: ${created.assigned_resource_name}. Waiting for college approval.` : 'No automatic match. Request sent for college manual allocation.')
+      ? (created.automaticSuggestion
+          ? `Request sent with automatic suggestion: ${created.assigned_resource_name}. Waiting for college approval.`
+          : 'No automatic match. Request sent for college manual allocation.')
       : 'Manual request submitted for college approval.';
+
     await afterMutation(message);
-  } catch (error) { toast(error.message, 'error'); }
+  } catch (error) {
+    toast(error.message, 'error');
+  }
 }
 async function submitReview(event) { event.preventDefault(); const form = Object.fromEntries(new FormData(event.currentTarget)); try { await api(`/requests/${form.requestId}`, { method: 'PATCH', body: JSON.stringify(form) }); await afterMutation('Request decision saved.'); } catch (error) { toast(error.message, 'error'); } }
-async function submitReschedule(event) { event.preventDefault(); const form = Object.fromEntries(new FormData(event.currentTarget)); try { await api(`/events/${form.eventId}`, { method: 'PATCH', body: JSON.stringify(form) }); await afterMutation('Event has been rescheduled.'); } catch (error) { toast(error.message, 'error'); } }
+async function submitReschedule(event) {
+  event.preventDefault();
+
+  const form = Object.fromEntries(new FormData(event.currentTarget));
+
+  // TIMEZONE FIX: convert local datetime-local values to UTC.
+  form.startAt = localDateTimeToISO(form.startAt);
+  form.endAt = localDateTimeToISO(form.endAt);
+
+  try {
+    await api(`/events/${form.eventId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(form)
+    });
+
+    await afterMutation('Event has been rescheduled.');
+  } catch (error) {
+    toast(error.message, 'error');
+  }
+}
 
 function haversineKm(first, second) {
   const earthRadiusKm = 6371;
