@@ -1,0 +1,21 @@
+{
+  "name": "campus-reserve",
+  "version": "1.0.0",
+  "private": true,
+  "description": "College Resource Management System",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch server/app.js",
+    "start": "node server/app.js",
+    "db:migrate": "node database/migrate.js",
+    "db:setup": "node database/seed.js",
+    "db:reset:nitt": "node database/reset-nitt.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.13.1"
+  }
+}
